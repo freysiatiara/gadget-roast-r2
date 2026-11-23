@@ -1,46 +1,63 @@
-"""One-Line Roast: The Gadget You Use Every Day — entry program.
+#!/usr/bin/env python3
+"""Entry program for the one-line gadget roast.
 
-Reads the single roast line stored in entry.txt (next to this file) and
-copies it verbatim to the competition output file. Every path is resolved
-from this script's own location or from environment variables, never from
-the caller's working directory.
+It reads the single roast line from entry.txt, sitting beside this script,
+and writes it verbatim to the output file the competition expects. Paths
+are derived from this file's own directory and the documented environment
+variables; the caller's working directory is never consulted.
 """
 import os
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SOURCE = os.path.join(HERE, "entry.txt")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENTRY_PATH = os.path.join(BASE_DIR, "entry.txt")
 
 
-def destination():
-    direct = os.environ.get("ENTRY_OUTPUT")
-    if direct:
-        return direct
-    for var in ("OUTPUT_DIR", "MAKEFUN_OUTPUT_DIR"):
-        folder = os.environ.get(var)
-        if folder:
-            return os.path.join(folder, "entry.txt")
+def resolve_output():
+    """Pick the output path: ENTRY_OUTPUT wins, then the output dir vars."""
+    explicit = os.environ.get("ENTRY_OUTPUT")
+    if explicit:
+        return explicit
+    for key in ("OUTPUT_DIR", "MAKEFUN_OUTPUT_DIR"):
+        directory = os.environ.get(key)
+        if directory:
+            return os.path.join(directory, "entry.txt")
     return os.path.join("/output", "entry.txt")
 
 
-def checked(payload):
-    # The gate accepts exactly one line of 1-200 characters, not only
-    # whitespace; the line must name a daily gadget or app.
-    text = payload.decode("utf-8").strip()
-    if not text or len(text) > 200 or "\n" in text:
-        raise ValueError("entry.txt must hold exactly one line of 1-200 characters")
+GADGET_WORDS = (
+    "printer", "phone", "laptop", "tablet", "watch", "headphone", "earbud",
+    "speaker", "camera", "mouse", "keyboard", "monitor", "router", "wifi",
+    "charger", "remote", "fridge", "microwave", "vacuum", "toaster", "car",
+    "app", "laptop", "computer", "screen", "battery",
+)
+
+
+def validate(payload):
+    """Gate check: entry.txt must be one line, 1-200 characters."""
+    line = payload.decode("utf-8").strip()
+    if not line:
+        raise ValueError("entry.txt is empty")
+    if len(line) > 200 or "\n" in line:
+        raise ValueError("entry.txt must hold a single line of 1-200 characters")
+    lowered = line.lower()
+    if not any(word in lowered for word in GADGET_WORDS):
+        raise ValueError("the roast line must name a gadget or app")
     return payload
 
 
-def main():
-    with open(SOURCE, "rb") as handle:
-        payload = checked(handle.read())
-    target = destination()
-    folder = os.path.dirname(target)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
-    with open(target, "wb") as handle:
-        handle.write(payload)
+def run():
+    with open(ENTRY_PATH, "rb") as source:
+        data = validate(source.read())
+    output = resolve_output()
+    parent = os.path.dirname(output)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(output, "wb") as sink:
+        sink.write(data)
+    # The grader's scorer must be able to read the output, regardless of
+    # the caller's umask: make it readable by everyone.
+    os.chmod(output, 0o644)
 
 
 if __name__ == "__main__":
-    main()
+    run()
